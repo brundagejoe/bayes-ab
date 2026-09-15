@@ -1,6 +1,6 @@
 import { build } from "esbuild"
 import { execSync } from "node:child_process"
-import { readFileSync, rmSync } from "node:fs"
+import { chmodSync, readFileSync, rmSync } from "node:fs"
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"))
 
@@ -22,6 +22,7 @@ await build({
   outfile: "dist/cli.js",
   banner: { js: "#!/usr/bin/env node" },
 })
+chmodSync("dist/cli.js", 0o755)
 
 await build({
   ...shared,

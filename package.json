@@ -1,0 +1,42 @@
+{
+  "name": "bayes-ab",
+  "version": "0.1.0",
+  "description": "Bayesian A/B test analysis on the command line, for humans and agents",
+  "keywords": ["ab-testing", "bayesian", "statistics", "cli", "experimentation", "conversion-rate"],
+  "homepage": "https://www.joebrundage.com/tools/bayesian-ab-test",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brundagejoe/bayes-ab.git"
+  },
+  "bugs": "https://github.com/brundagejoe/bayes-ab/issues",
+  "license": "MIT",
+  "author": "Joe Brundage",
+  "type": "module",
+  "bin": {
+    "bayes-ab": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": {
+    "node": ">=18.11"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "check": "npm run typecheck && npm test && npm run build",
+    "prepublishOnly": "npm run check"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0"
+  }
+}

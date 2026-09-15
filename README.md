@@ -181,7 +181,7 @@ bayes-ab analyze --visitors-a 12000 --conversions-a 660 --visitors-b 11850 --con
   "effect": { "relativeLift": 0.095384, "relativeLiftCI95": [-0.011657, 0.213021], "absoluteDiff": 0.005253, "absoluteDiffCI95": [-0.000675, 0.011123], "observedRelativeLift": 0.095512, "observedAbsoluteDiff": 0.005253 },
   "expectedLoss": { "shipA": 0.00528, "shipB": 0.00005 },
   "variants": { "A": { "...": "..." }, "B": { "...": "..." } },
-  "sampleSize": { "requiredPerVariant": 26972, "additionalPerVariant": 13786, "detectableEffectNow": 0.147083 },
+  "sampleSize": { "requiredPerVariant": 25636, "additionalPerVariant": 13786, "detectableEffectNow": 0.147083 },
   "waiting": [ { "extraPerVariant": 1000, "expectedRegret": 0.00006, "valueOfWaiting": 0 }, "..." ],
   "frequentist": { "pValueTwoSided": 0.081709 },
   "shareUrl": "https://www.joebrundage.com/tools/bayesian-ab-test?visitorsA=12000&conversionsA=660&visitorsB=11850&conversionsB=714&thresholdPercent=95&meaningfulLiftPercent=10"

@@ -1,6 +1,6 @@
 {
   "name": "bayes-ab",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Bayesian A/B test analysis on the command line, for humans and agents",
   "keywords": ["ab-testing", "bayesian", "statistics", "cli", "experimentation", "conversion-rate"],
   "homepage": "https://www.joebrundage.com/tools/bayesian-ab-test",

@@ -10,6 +10,7 @@ import {
   sampleBeta,
   sampleBinomialApprox,
 } from "./math.ts"
+import { liftDensity, type LiftDensityPoint } from "./lift.ts"
 import { requiredSamplePerVariant } from "./plan.ts"
 import { shareUrl } from "./share.ts"
 
@@ -21,7 +22,7 @@ export const PRIOR_BETA = 1
 
 const POSTERIOR_CHART_POINTS = 96
 const WAITING_SCENARIOS = [1000, 2000, 5000, 10000]
-const WAITING_VALUE_SIMULATIONS = 1500
+const WAITING_VALUE_SIMULATIONS = 6000
 
 export type DecisionStatus = "ship_b" | "keep_a" | "continue" | "inconclusive"
 export type EvidenceStrength = "low" | "moderate" | "strong"
@@ -106,6 +107,8 @@ export type AnalyzeResult = {
     absoluteDiffCI95: [number, number]
     observedRelativeLift: number | null
     observedAbsoluteDiff: number
+    relativeLiftMedian: number
+    relativeLiftIQR: [number, number]
   }
   expectedLoss: { shipA: number; shipB: number }
   variants: { A: VariantSummary; B: VariantSummary }
@@ -117,6 +120,7 @@ export type AnalyzeResult = {
   waiting: WaitingScenario[]
   frequentist: { pValueTwoSided: number }
   chart?: ChartPoint[]
+  liftChart?: LiftDensityPoint[]
   shareUrl: string
 }
 
@@ -198,8 +202,11 @@ function waitingScenarios(
   betaB: number,
   expectedRegretNow: number
 ): WaitingScenario[] {
-  const random = makeDeterministicRandom(alphaA * 11 + betaA * 13 + alphaB * 17 + betaB * 19)
+  const seed = alphaA * 11 + betaA * 13 + alphaB * 17 + betaB * 19
   return WAITING_SCENARIOS.map((extraPerVariant) => {
+    /* Each scenario replays the same draws of the true rates, so the
+       comparison across waiting lengths is not muddied by sampling noise. */
+    const random = makeDeterministicRandom(seed)
     let regretSum = 0
     for (let index = 0; index < WAITING_VALUE_SIMULATIONS; index += 1) {
       const trueRateA = sampleBeta(alphaA, betaA, random)
@@ -290,7 +297,9 @@ export function analyze({
       aBeatsB: 1 - pBBeatsA,
       meaningfulLift: probabilityMeaningfulLift,
       meaningfulHarm: probabilityMeaningfulHarm,
-      harmful: share((lift) => lift < 0),
+      /* The exact complement of the closed-form win probability. Estimating it
+         from the samples left the two halves summing to slightly less than 1. */
+      harmful: 1 - pBBeatsA,
       liftAbove1pct: share((lift) => lift > 0.01),
       liftAbove5pct: share((lift) => lift > 0.05),
       harmBeyond5pct: share((lift) => lift < -0.05),
@@ -303,6 +312,8 @@ export function analyze({
       absoluteDiffCI95: [quantile(sortedAbsoluteDiffs, 0.025), quantile(sortedAbsoluteDiffs, 0.975)],
       observedRelativeLift: rateA > 0 ? rateB / rateA - 1 : null,
       observedAbsoluteDiff: rateB - rateA,
+      relativeLiftMedian: quantile(sortedRelativeLifts, 0.5),
+      relativeLiftIQR: [quantile(sortedRelativeLifts, 0.25), quantile(sortedRelativeLifts, 0.75)],
     },
     expectedLoss: { shipA: expectedLossShipA, shipB: expectedLossShipB },
     variants: {
@@ -326,6 +337,7 @@ export function analyze({
     const sortedA = [...samplesA].sort((left, right) => left - right)
     const sortedB = [...samplesB].sort((left, right) => left - right)
     result.chart = chartData(alphaA, betaA, alphaB, betaB, sortedA, sortedB)
+    result.liftChart = liftDensity(alphaA, betaA, alphaB, betaB, sortedRelativeLifts)
   }
 
   return result

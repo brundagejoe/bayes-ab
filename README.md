@@ -23,7 +23,7 @@ Bayes action now    Ship B   (expected regret 0.0050 pp, about 0.50 missed conve
 P(B beats A)                        95.91%
 P(relative lift > +10%)             46.42%
 P(relative lift < -10%)             0.02%
-P(B is harmful at all)              4.06%
+P(B is harmful at all)              4.09%
 
 Relative lift          +9.54%   95% CI  -1.17% to +21.30%
 Absolute difference    +0.53 pp   95% CI  -0.07 pp to +1.11 pp
@@ -173,16 +173,16 @@ bayes-ab analyze --visitors-a 12000 --conversions-a 660 --visitors-b 11850 --con
 ```json
 {
   "tool": "bayes-ab",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "command": "analyze",
-  "inputs": { "visitorsA": 12000, "conversionsA": 660, "visitorsB": 11850, "conversionsB": 714, "threshold": 0.95, "minEffect": 0.1, "prior": [1, 1], "samples": 12000, "seed": 112396 },
+  "inputs": { "visitorsA": 12000, "conversionsA": 660, "visitorsB": 11850, "conversionsB": 714, "threshold": 0.95, "minEffect": 0.1, "prior": [1, 1], "samples": 12000, "seed": 116218 },
   "decision": { "status": "continue", "label": "Continue test", "evidence": "low", "maturity": "building", "maturityProgress": 0.462241, "bayesActionNow": "B", "expectedRegretNow": 0.00005 },
-  "probability": { "bBeatsA": 0.959114, "aBeatsB": 0.040886, "meaningfulLift": 0.464167, "meaningfulHarm": 0.000167, "harmful": 0.040583, "liftAbove1pct": 0.937833, "liftAbove5pct": 0.788417, "harmBeyond5pct": 0.00325, "harmBeyond10pct": 0.000167 },
-  "effect": { "relativeLift": 0.095384, "relativeLiftCI95": [-0.011657, 0.213021], "absoluteDiff": 0.005253, "absoluteDiffCI95": [-0.000675, 0.011123], "observedRelativeLift": 0.095512, "observedAbsoluteDiff": 0.005253 },
+  "probability": { "bBeatsA": 0.959114, "aBeatsB": 0.040886, "meaningfulLift": 0.464167, "meaningfulHarm": 0.000167, "harmful": 0.040886, "liftAbove1pct": 0.937833, "liftAbove5pct": 0.788417, "harmBeyond5pct": 0.00325, "harmBeyond10pct": 0.000167 },
+  "effect": { "relativeLift": 0.095384, "relativeLiftCI95": [-0.011657, 0.213021], "absoluteDiff": 0.005253, "absoluteDiffCI95": [-0.000675, 0.011123], "observedRelativeLift": 0.095512, "observedAbsoluteDiff": 0.005253, "relativeLiftMedian": 0.095267, "relativeLiftIQR": [0.056954, 0.134715] },
   "expectedLoss": { "shipA": 0.00528, "shipB": 0.00005 },
   "variants": { "A": { "...": "..." }, "B": { "...": "..." } },
   "sampleSize": { "requiredPerVariant": 25636, "additionalPerVariant": 13786, "detectableEffectNow": 0.147083 },
-  "waiting": [ { "extraPerVariant": 1000, "expectedRegret": 0.00006, "valueOfWaiting": 0 }, "..." ],
+  "waiting": [ { "extraPerVariant": 1000, "expectedRegret": 0.000048, "valueOfWaiting": 0.000002 }, "..." ],
   "frequentist": { "pValueTwoSided": 0.081709 },
   "shareUrl": "https://www.joebrundage.com/tools/bayesian-ab-test?visitorsA=12000&conversionsA=660&visitorsB=11850&conversionsB=714&thresholdPercent=95&meaningfulLiftPercent=10"
 }
@@ -229,10 +229,23 @@ const result = analyze({ visitorsA: 12000, conversionsA: 660, visitorsB: 11850, 
 result.probability.bBeatsA   // 0.9591138673472563
 ```
 
+`analyze({ ..., includeChart: true })` adds `chart` (both posterior densities) and `liftChart` (the exact density of the relative lift, peak scaled to 1), which is what the web tool plots.
+
+The primitives behind it are exported too, for anything that needs the same math without a full analysis:
+
+| Export | What it does |
+|---|---|
+| `betaPdf(x, alpha, beta)`, `logBeta`, `logGamma` | Beta density and its log-gamma building blocks |
+| `probabilityBBeatsA(alphaA, betaA, alphaB, betaB)` | Exact P(B > A) for two Beta posteriors |
+| `integratedExpectedLoss(alphaA, betaA, alphaB, betaB)` | Expected loss of shipping each variant by numerical integration, no sampling |
+| `liftDensity(alphaA, betaA, alphaB, betaB, sortedLifts)` | Exact relative-lift density over the range the sorted lifts span |
+
+This package is the source of truth for the math on joebrundage.com: the [calculator](https://www.joebrundage.com/tools/bayesian-ab-test) and the [primer](https://www.joebrundage.com/tools/bayesian-ab-testing-primer) both import it. Change the math here, publish, and bump the site's dependency.
+
 ## Method
 
 - Each conversion rate gets a Beta(1,1) prior. Posteriors are Beta(1 + conversions, 1 + non-conversions).
-- P(B beats A) is the exact closed form from [Evan Miller](https://www.evanmiller.org/bayesian-ab-testing.html).
+- P(B beats A) is the exact closed form from [Evan Miller](https://www.evanmiller.org/bayesian-ab-testing.html). P(B is harmful) is its exact complement.
 - Lift intervals, threshold probabilities and expected loss come from 12,000 seeded Monte Carlo draws.
 - The meaningful effect is relative and symmetric: `--min-effect 10` means B must be 10% better than A to count as a win or 10% worse to count as a loss.
 - `project` samples true rates from the exact posterior, then uses a normal approximation to the posterior when re-checking the stopping rule on each simulated day. Day zero is checked exactly.

@@ -54,7 +54,7 @@ export const ANALYZE_SCHEMA = {
       aBeatsB: fraction,
       meaningfulLift: { ...fraction, description: "P(relative lift > minEffect)" },
       meaningfulHarm: { ...fraction, description: "P(relative lift < -minEffect)" },
-      harmful: { ...fraction, description: "P(relative lift < 0)" },
+      harmful: { ...fraction, description: "P(B < A), the exact complement of bBeatsA" },
       liftAbove1pct: fraction,
       liftAbove5pct: fraction,
       harmBeyond5pct: fraction,
@@ -67,6 +67,8 @@ export const ANALYZE_SCHEMA = {
       absoluteDiffCI95: pair(number),
       observedRelativeLift: { type: ["number", "null"] },
       observedAbsoluteDiff: number,
+      relativeLiftMedian: number,
+      relativeLiftIQR: pair(number),
     }),
     expectedLoss: object({ shipA: fraction, shipB: fraction }),
     variants: object({
@@ -87,6 +89,11 @@ export const ANALYZE_SCHEMA = {
       type: "array",
       description: "Only with --include-chart.",
       items: object({ rate: fraction, densityA: number, densityB: number }),
+    },
+    liftChart: {
+      type: "array",
+      description: "Only with --include-chart. Exact density of the relative lift, peak scaled to 1.",
+      items: object({ relativeLift: number, density: number }),
     },
     shareUrl: { type: "string", format: "uri" },
   }, [

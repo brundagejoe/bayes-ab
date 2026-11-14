@@ -46,7 +46,7 @@ function envelope<T extends { inputs: object }>(command: string, result: T, deri
 }
 
 function stripChart(result: AnalyzeResult): AnalyzeResult {
-  const { chart, ...rest } = result
+  const { chart, liftChart, ...rest } = result
   return rest
 }
 

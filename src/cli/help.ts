@@ -61,7 +61,7 @@ OUTPUT
                          so piping or calling from an agent gets JSON automatically.
   --pretty               Indent the JSON.
   --brief                One-line human summary (analyze and project).
-  --include-chart        Add 96 posterior density points to analyze's JSON.
+  --include-chart        Add posterior and lift density curves to analyze's JSON.
   --samples N            Monte Carlo samples for intervals and loss.                default 12000
   --seed N               RNG seed. Defaults to a value derived from the inputs, so identical
                          inputs always give identical output.

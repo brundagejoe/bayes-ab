@@ -22,7 +22,9 @@ describe("analyze matches the web tool on its default example", () => {
   it("monte carlo summaries are bit-for-bit stable", () => {
     assert.equal(result.probability.meaningfulLift, 0.46416666666666667)
     assert.equal(result.probability.meaningfulHarm, 0.00016666666666666666)
-    assert.equal(result.probability.harmful, 0.04058333333333333)
+    assert.equal(result.probability.harmful, 1 - result.probability.bBeatsA)
+    assert.equal(result.effect.relativeLiftMedian, 0.0952671665966568)
+    assert.deepEqual(result.effect.relativeLiftIQR, [0.056954428973876425, 0.13471478134460024])
     assert.ok(Math.abs(result.expectedLoss.shipB - 0.00004961737918941582) < 1e-15)
     assert.ok(Math.abs(result.expectedLoss.shipA - 0.005279624093807332) < 1e-15)
     assert.ok(Math.abs(result.effect.relativeLiftCI95[0] - -0.011656544416891056) < 1e-15)
@@ -45,7 +47,7 @@ describe("analyze matches the web tool on its default example", () => {
       result.waiting.map((scenario) => scenario.extraPerVariant),
       [1000, 2000, 5000, 10000]
     )
-    assert.ok(Math.abs((result.waiting[2]?.valueOfWaiting ?? 0) - 0.000021125966250034352) < 1e-15)
+    assert.ok(Math.abs((result.waiting[2]?.valueOfWaiting ?? 0) - 0.0000023585770215513017) < 1e-15)
   })
 
   it("share url reproduces the web tool state", () => {
@@ -59,6 +61,16 @@ describe("analyze matches the web tool on its default example", () => {
     assert.equal(result.chart, undefined)
     const withChart = analyze({ ...WEB_DEFAULT, includeChart: true })
     assert.equal(withChart.chart?.length, 96)
+    assert.equal(result.liftChart, undefined)
+    assert.equal(withChart.liftChart?.length, 160)
+    assert.equal(Math.max(...(withChart.liftChart ?? []).map((point) => point.density)), 1)
+  })
+
+  it("waiting scenarios replay the same draws of the true rates", () => {
+    assert.deepEqual(
+      result.waiting.map((scenario) => scenario.expectedRegret),
+      [0.000047658357994879905, 0.000047658357994879905, 0.00004725880216786454, 0.000043422879341216045]
+    )
   })
 })
 

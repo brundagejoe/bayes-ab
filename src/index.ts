@@ -19,3 +19,27 @@ export { betaPdf, logBeta, logGamma, probabilityBBeatsA, regularizedIncompleteBe
 export { liftDensity } from "./core/lift.ts"
 export type { LiftDensityPoint } from "./core/lift.ts"
 export { integratedExpectedLoss } from "./core/loss.ts"
+export {
+  analyzeSkeptical,
+  calibrateLiftPrior,
+  observedLogLift,
+  parsePastTestsCsv,
+  skepticalShareUrl,
+  DEFAULT_LIFT_PRIOR_SD,
+  DEFAULT_MAX_RELATIVE_LOSS,
+  DEFAULT_SKEPTICAL_MIN_EFFECT,
+  MIN_RELIABLE_CONVERSIONS,
+  SKEPTICAL_LABELS,
+  SKEPTICAL_WEB_TOOL_URL,
+} from "./core/skeptical.ts"
+export type {
+  CalibrationResult,
+  PastTest,
+  SkepticalChartPoint,
+  SkepticalInputs,
+  SkepticalResult,
+  SkepticalSensitivityRow,
+  SkepticalStatus,
+  SkepticalWarning,
+} from "./core/skeptical.ts"
+export { normalCdf, inverseNormalCdf } from "./core/math.ts"

@@ -102,6 +102,109 @@ export const ANALYZE_SCHEMA = {
   ]),
 }
 
+const status = { enum: ["ship_b", "keep_a", "continue", "no_meaningful_difference"] }
+
+export const SKEPTICAL_SCHEMA = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  title: "bayes-ab skeptical output",
+  ...object({
+    ...envelope,
+    command: { const: "skeptical" },
+    inputs: object(
+      {
+        visitorsA: integer,
+        conversionsA: integer,
+        visitorsB: integer,
+        conversionsB: integer,
+        liftPriorSd: { ...fraction, description: "Spread of true lifts, as a fraction on the log scale (about relative for small values)." },
+        threshold: fraction,
+        minEffect: fraction,
+        maxRelativeLoss: fraction,
+        derivedFrom,
+      },
+      ["visitorsA", "conversionsA", "visitorsB", "conversionsB", "liftPriorSd", "threshold", "minEffect", "maxRelativeLoss"]
+    ),
+    decision: object({
+      status,
+      label: { type: "string" },
+      checks: object({
+        bBeatsAReached: { type: "boolean" },
+        aBeatsBReached: { type: "boolean" },
+        shipBLossAcceptable: { type: "boolean" },
+        keepALossAcceptable: { type: "boolean" },
+        withinNoEffectBand: { type: "boolean", description: "95% CI inside ±minEffect and the data outweighs the prior." },
+      }),
+    }),
+    logLift: object({ observed: number, noise: number, priorSd: number, posteriorMean: number, posteriorSd: number }),
+    weights: object({
+      prior: number,
+      data: number,
+      dataShare: fraction,
+      priorEquivalentConversionsPerVariant: number,
+      priorEquivalentVisitorsPerVariant: number,
+    }),
+    probability: object({
+      bBeatsA: fraction,
+      aBeatsB: fraction,
+      meaningfulLift: { ...fraction, description: "P(relative lift > minEffect)" },
+      meaningfulHarm: { ...fraction, description: "P(relative lift < -minEffect)" },
+    }),
+    effect: object({
+      observedRelativeLift: { type: ["number", "null"] },
+      relativeLift: { ...number, description: "Posterior median relative lift, after the prior's pull toward zero." },
+      relativeLiftMean: number,
+      relativeLiftCI95: pair(number),
+      absoluteDiff: number,
+      absoluteDiffCI95: pair(number),
+    }),
+    expectedLoss: object({
+      shipA: { ...fraction, description: "Conversion-rate fraction." },
+      shipB: { ...fraction, description: "Conversion-rate fraction." },
+      shipARelative: { ...number, description: "Relative to the baseline rate." },
+      shipBRelative: { ...number, description: "Relative to the baseline rate." },
+    }),
+    variants: object({
+      A: object({ visitors: integer, conversions: integer, rate: fraction }),
+      B: object({ visitors: integer, conversions: integer, rate: fraction }),
+    }),
+    sampleSize: object({ baselineRate: fraction, requiredPerVariant: integer, additionalPerVariant: integer, progress: fraction }),
+    sensitivity: object({
+      rows: { type: "array", items: object({ liftPriorSd: fraction, status, relativeLift: number, bBeatsA: fraction }) },
+      robust: { type: "boolean", description: "True when half and 1.5x the prior spread give the same decision." },
+    }),
+    warnings: { type: "array", items: { enum: ["few_conversions", "zero_or_all_conversions", "decision_sensitive_to_prior"] } },
+    approximation: { const: "normal" },
+    chart: {
+      type: "array",
+      description: "Only with --include-chart. Prior, data and posterior densities over the relative lift, each peak scaled to 1.",
+      items: object({ relativeLift: number, prior: number, data: number, posterior: number }),
+    },
+    shareUrl: { type: "string", format: "uri" },
+  }, [
+    "tool", "version", "command", "inputs", "decision", "logLift", "weights", "probability", "effect",
+    "expectedLoss", "variants", "sampleSize", "sensitivity", "warnings", "approximation", "shareUrl",
+  ]),
+}
+
+export const CALIBRATE_SCHEMA = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  title: "bayes-ab calibrate output",
+  ...object({
+    ...envelope,
+    command: { const: "calibrate" },
+    inputs: object({ file: { type: "string" } }),
+    tests: integer,
+    liftPriorSd: { ...fraction, description: "Suggested --lift-prior-sd, as a fraction." },
+    floored: { type: "boolean" },
+    observedSd: number,
+    typicalNoise: number,
+    averageLogLift: number,
+    method: { const: "dersimonian-laird" },
+    warnings: { type: "array", items: { enum: ["few_tests", "no_spread_beyond_noise", "average_not_zero"] } },
+    perTest: { type: "array", items: object({ relativeLift: number, logLift: number, noise: number }) },
+  }),
+}
+
 export const PROJECT_SCHEMA = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   title: "bayes-ab project output",
@@ -174,7 +277,9 @@ export const ERROR_SCHEMA = {
 
 export const SCHEMAS = {
   analyze: ANALYZE_SCHEMA,
+  skeptical: SKEPTICAL_SCHEMA,
   project: PROJECT_SCHEMA,
   plan: PLAN_SCHEMA,
+  calibrate: CALIBRATE_SCHEMA,
   error: ERROR_SCHEMA,
 }

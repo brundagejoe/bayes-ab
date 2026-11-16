@@ -1,12 +1,16 @@
+import { readFileSync } from "node:fs"
+
 import { analyze, type AnalyzeResult } from "../core/analyze.ts"
 import { round } from "../core/math.ts"
 import { plan, type PlanResult } from "../core/plan.ts"
 import { project, type ProjectResult } from "../core/project.ts"
+import { analyzeSkeptical, calibrateLiftPrior, parsePastTestsCsv, type SkepticalResult } from "../core/skeptical.ts"
 import { CliError, parseCliArgs, type OutputOptions } from "./args.ts"
 import { helpText } from "./help.ts"
 import { renderAnalyze, renderAnalyzeBrief } from "./render/analyze.ts"
 import { renderPlan } from "./render/plan.ts"
 import { renderProject, renderProjectBrief } from "./render/project.ts"
+import { renderCalibrate, renderSkeptical, renderSkepticalBrief } from "./render/skeptical.ts"
 import { SCHEMAS } from "./schema.ts"
 
 declare const __VERSION__: string | undefined
@@ -45,6 +49,11 @@ function envelope<T extends { inputs: object }>(command: string, result: T, deri
   return { tool: "bayes-ab", version: VERSION, command, ...result, inputs }
 }
 
+function stripSkepticalChart(result: SkepticalResult): SkepticalResult {
+  const { chart, ...rest } = result
+  return rest
+}
+
 function stripChart(result: AnalyzeResult): AnalyzeResult {
   const { chart, liftChart, ...rest } = result
   return rest
@@ -71,7 +80,7 @@ export function run(argv: string[], io: Io): number {
 
   try {
     if (parsed.kind === "schema") {
-      const payload = parsed.target ? SCHEMAS[parsed.target as "analyze" | "project" | "plan"] : SCHEMAS
+      const payload = parsed.target ? SCHEMAS[parsed.target] : SCHEMAS
       io.stdout(JSON.stringify(payload, null, 2) + "\n")
       return 0
     }
@@ -83,6 +92,38 @@ export function run(argv: string[], io: Io): number {
         emitJson(io, parsed.output, envelope("analyze", parsed.output.includeChart ? result : stripChart(result), derivedFrom))
       } else {
         io.stdout((parsed.output.brief ? renderAnalyzeBrief(result, derivedFrom) : renderAnalyze(result, derivedFrom)) + "\n")
+      }
+      return 0
+    }
+
+    if (parsed.kind === "skeptical") {
+      const { derivedFrom, ...inputs } = parsed.args
+      const result = analyzeSkeptical({ ...inputs, includeChart: parsed.output.includeChart })
+      if (json) {
+        emitJson(io, parsed.output, envelope("skeptical", parsed.output.includeChart ? result : stripSkepticalChart(result), derivedFrom))
+      } else {
+        io.stdout((parsed.output.brief ? renderSkepticalBrief(result, derivedFrom) : renderSkeptical(result, derivedFrom)) + "\n")
+      }
+      return 0
+    }
+
+    if (parsed.kind === "calibrate") {
+      let text: string
+      try {
+        text = readFileSync(parsed.args.file, "utf8")
+      } catch {
+        throw new CliError(`Could not read --file ${parsed.args.file}.`, { field: "file" })
+      }
+      let result
+      try {
+        result = calibrateLiftPrior(parsePastTestsCsv(text))
+      } catch (error) {
+        throw new CliError(error instanceof Error ? error.message : String(error), { field: "file" })
+      }
+      if (json) {
+        emitJson(io, parsed.output, { tool: "bayes-ab", version: VERSION, command: "calibrate", inputs: { file: parsed.args.file }, ...result })
+      } else {
+        io.stdout(renderCalibrate(result) + "\n")
       }
       return 0
     }

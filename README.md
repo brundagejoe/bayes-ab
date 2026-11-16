@@ -80,6 +80,8 @@ npm install -g bayes-ab
 | Command | Question it answers |
 |---|---|
 | `analyze` | Given what I have observed, what should I do? The web tool's full readout. |
+| `skeptical` | The same question, assuming most tests do little: the prior goes on the lift, so a small, noisy sample cannot claim a big win. |
+| `calibrate` | From my past tests, how big are real lifts? Suggests the `skeptical` prior. |
 | `project` | If traffic continues at this pace, how long until this test decides, and which way? |
 | `plan` | Before any data: how many visitors per variant do I need to detect a given effect? |
 | `schema` | What fields will the JSON output contain? |
@@ -105,6 +107,66 @@ bayes-ab analyze --visitors-a 12000 --conversions-a 660 --visitors-b 11850 --con
 ```
 
 A shared prior pulls both arms toward the same rate, so a strong one shrinks the estimated lift and makes decisions more conservative.
+
+### skeptical
+
+`analyze` puts a Beta prior on each variant's rate. That says each rate is probably near some baseline, but nothing about how close the two rates are to each other, so on small samples noise passes straight through as a large lift. When most of your tests do little, the "95%" calls on small samples come out right far less often than 95% of the time, and the lifts they report are inflated.
+
+`skeptical` puts the prior on the lift itself: the log lift ln(rate B / rate A) is Normal(0, `--lift-prior-sd`), 4% by default, which says most true lifts fall within about ±8%. The posterior is a weighted average of zero and the observed lift, with each weighted by 1 / noise², so everything is closed form and can be checked by hand.
+
+```sh
+bayes-ab skeptical --visitors-a 10000 --conversions-a 200 --visitors-b 10000 --conversions-b 230
+```
+
+```
+Skeptical A/B test  lift prior Normal(0, 4.0%) · threshold 95% · max loss 0.10% relative · no-effect band ±5%
+
+Decision            Continue test
+  P(B beats A) ≥ 95%                no
+  Loss if ship B ≤ 0.10%            no
+  ...
+
+How the prior pulled the estimate
+  Observed lift           +15.00%   ± 9.6% noise
+  Estimated lift          +2.10%   95% CI  -5.02% to +9.76%
+  Weight on the data      15%   the rest pulls toward 0
+  Prior is worth          1,250 conversions   about 62,500 visitors per variant
+  ...
+
+Sensitivity  same data, different lift priors
+  Prior spread    Estimated lift    P(B beats A)         Decision
+  ±2.0%                   +0.59%          61.76%    Continue test
+  ±4.0%                   +2.10%          71.36%    Continue test
+  ±6.0%                   +4.03%          78.13%    Continue test
+```
+
+The decision has two conditions per side, and the readout shows each one:
+
+- `ship_b` when P(B beats A) reaches `--threshold` **and** the expected loss of shipping B is at most `--max-relative-loss` (0.1% of the baseline rate by default). The second condition is what "make sure it is not worse" means in numbers.
+- `keep_a`, the same for A.
+- `no_meaningful_difference` when the 95% interval sits inside ±`--min-effect` (5% by default) and the data, not the prior, carries most of the weight.
+- `continue` otherwise.
+
+Sensitivity reruns the analysis at half and one and a half times the prior spread. If the decision changes, the readout says the data has not settled it yet.
+
+It uses the normal approximation to the binomial, which is good from about 30 conversions per variant; below that the readout warns.
+
+### calibrate
+
+The prior spread is a belief about your own tests, so the best source for it is your own tests. Put past results in a CSV, one test per line:
+
+```csv
+visitorsA,conversionsA,visitorsB,conversionsB
+50000,1000,50000,1080
+50000,1000,50000,960
+"120,000",2400,"120,000",2470
+```
+
+```sh
+bayes-ab calibrate --file past-tests.csv
+```
+
+Past lifts vary for two reasons: real differences between tests, and noise within each. `calibrate` subtracts the second from the first (the DerSimonian-Laird estimator from meta-analysis) and suggests the result as `--lift-prior-sd`. It needs at least 3 tests and warns below 10.
 
 ### project
 
@@ -231,13 +293,15 @@ or add a line like this to your agent instructions:
 The math is exported without the CLI:
 
 ```ts
-import { analyze, project, plan } from "bayes-ab"
+import { analyze, analyzeSkeptical, calibrateLiftPrior, project, plan } from "bayes-ab"
 
 const result = analyze({ visitorsA: 12000, conversionsA: 660, visitorsB: 11850, conversionsB: 714 })
 result.probability.bBeatsA   // 0.9591138673472563
 
 analyze({ visitorsA: 12000, conversionsA: 660, visitorsB: 11850, conversionsB: 714, prior: [55, 945] })
 ```
+
+`analyzeSkeptical({ visitorsA, conversionsA, visitorsB, conversionsB, liftPriorSd, threshold, minEffect, maxRelativeLoss, includeChart })` is the `skeptical` command. With `includeChart: true` it adds `chart`: the prior, data and posterior densities over the relative lift, each peak scaled to 1. `calibrateLiftPrior(pastTests)` and `parsePastTestsCsv(text)` are the `calibrate` command.
 
 `analyze` and `project` take an optional `prior: [alpha, beta]`, default `[1, 1]`. Non-positive values throw a `RangeError`; `validatePrior` and `isDefaultPrior` are exported for forms that want to check first.
 
@@ -261,6 +325,8 @@ This package is the source of truth for the math on joebrundage.com: the [calcul
 - P(B beats A) is the exact closed form from [Evan Miller](https://www.evanmiller.org/bayesian-ab-testing.html) when α is a whole number. For a fractional α it is integrated numerically (tanh-sinh quadrature over the incomplete beta function), accurate to about 1e-10. P(B is harmful) is its exact complement.
 - Lift intervals, threshold probabilities and expected loss come from 12,000 seeded Monte Carlo draws.
 - The meaningful effect is relative and symmetric: `--min-effect 10` means B must be 10% better than A to count as a win or 10% worse to count as a loss.
+- `skeptical` works on the log lift L = ln(rate B / rate A). The observed L has noise² = 1/cA − 1/nA + 1/cB − 1/nB (the delta method). With the prior L ~ Normal(0, σ²), the posterior is Normal with precision 1/σ² + 1/noise² and mean (1/noise²) × observed L / precision. Probabilities, intervals and expected losses are closed form on that posterior; expected losses use the log-normal partial expectation. A variant with 0 conversions (or all) gets half a conversion added.
+- `calibrate` estimates σ with the DerSimonian-Laird random-effects estimator, floored at 0.5%.
 - `project` samples true rates from the exact posterior, then uses a normal approximation to the posterior when re-checking the stopping rule on each simulated day. Day zero is checked exactly.
 
 ## Development

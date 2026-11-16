@@ -11,13 +11,18 @@ loss from shipping either variant, and a forward projection of how long the
 test needs to run. Same math as ${WEB_TOOL_URL}
 
 USAGE
-  bayes-ab analyze  --visitors-a N --conversions-a N --visitors-b N --conversions-b N [options]
-  bayes-ab project  <analyze inputs> --daily-visitors N [--horizon DAYS] [--stop-rule RULE]
-  bayes-ab plan     --baseline RATE --min-effect PCT [--daily-visitors N]
-  bayes-ab schema   [analyze|project|plan]
+  bayes-ab analyze    --visitors-a N --conversions-a N --visitors-b N --conversions-b N [options]
+  bayes-ab skeptical  <analyze inputs> [--lift-prior-sd PCT] [--max-relative-loss PCT]
+  bayes-ab calibrate  --file PAST_TESTS.csv
+  bayes-ab project    <analyze inputs> --daily-visitors N [--horizon DAYS] [--stop-rule RULE]
+  bayes-ab plan       --baseline RATE --min-effect PCT [--daily-visitors N]
+  bayes-ab schema     [analyze|skeptical|project|plan|calibrate]
 
 COMMANDS
   analyze   Given what you observed, what should you do? The web tool's full readout.
+  skeptical The same question with the prior on the lift: assumes most tests do little,
+            so small, noisy samples cannot claim big wins. Better calibrated early on.
+  calibrate From past tests, how big are real lifts? Suggests --lift-prior-sd.
   project   If traffic continues at this pace, how long until the test decides, and which way?
   plan      Before any data: how many visitors per variant to detect a given effect?
   schema    Print the JSON Schema of a command's output, for parsing ahead of time.
@@ -39,6 +44,25 @@ INPUTS (analyze, project)
                                        Beta(1,1) is flat; Beta(0.5,0.5) is Jeffreys; Beta(55,945)
                                        says "about 5.5%, worth 1,000 visitors".   default 1, 1
   Whole numbers may include commas or underscores: 12,000 and 12_000 both work.
+
+SKEPTICAL (skeptical)
+  Takes the same --visitors/--conversions/--rate and --threshold inputs as analyze.
+  --lift-prior-sd PCT    Typical size of a real lift. Prior is Normal(0, PCT) on the log
+                         lift: with 4, most true lifts fall within about ±8%. Use
+                         calibrate to set it from your own past tests.          default 4
+  --max-relative-loss PCT  Ship (or keep) only if the expected loss of doing so is at most
+                         this share of the baseline rate.                       default 0.1
+  --min-effect PCT       Band for "no meaningful difference": the 95% CI must sit inside
+                         ±PCT and the data must outweigh the prior.             default 5
+  Decision: ship_b when P(B beats A) reaches the threshold and the loss is acceptable;
+  keep_a likewise for A; no_meaningful_difference as above; otherwise continue.
+  Uses the normal approximation; reliable from about 30 conversions per variant.
+
+CALIBRATION (calibrate)
+  --file PATH            CSV, one past test per line: visitorsA,conversionsA,visitorsB,conversionsB.
+                         A header line and # comments are skipped. At least 3 tests; 10+ is better.
+  Estimates the spread of true lifts with the DerSimonian-Laird method: the variation
+  in past lifts minus the part noise alone explains.
 
 PROJECTION (project)
   --daily-visitors N     Visitors per day, per variant. Required.
@@ -76,6 +100,7 @@ OUTPUT
 
 READING THE OUTPUT
   decision.status        ship_b | keep_a | continue | inconclusive
+                         (skeptical: ship_b | keep_a | continue | no_meaningful_difference)
                          ship_b / keep_a: P(meaningful lift / harm) reached the threshold.
                          continue: not there yet and the sample is still small.
                          inconclusive: sample is large but the effect straddles the threshold.
@@ -100,6 +125,8 @@ EXAMPLES
   bayes-ab project --visitors-a 12000 --conversions-a 660 --visitors-b 11850 --conversions-b 714 --daily-visitors 1500
   bayes-ab project --visitors-a 12000 --conversions-a 660 --visitors-b 11850 --conversions-b 714 \\
                    --daily-visitors 1500 --horizon 56 --min-effect 5 --json
+  bayes-ab skeptical --visitors-a 10000 --conversions-a 200 --visitors-b 10000 --conversions-b 230
+  bayes-ab calibrate --file past-tests.csv
   bayes-ab plan --baseline 5.5% --min-effect 10 --daily-visitors 1500
   bayes-ab schema project
 

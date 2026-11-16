@@ -2,6 +2,7 @@ import { parseArgs } from "node:util"
 
 import { DEFAULT_MIN_EFFECT, DEFAULT_SAMPLES, DEFAULT_THRESHOLD, PRIOR_ALPHA, PRIOR_BETA } from "../core/analyze.ts"
 import { DEFAULT_HORIZON_DAYS, DEFAULT_MAX_LOSS, DEFAULT_SIMULATIONS, type StopRule } from "../core/project.ts"
+import { DEFAULT_LIFT_PRIOR_SD, DEFAULT_MAX_RELATIVE_LOSS, DEFAULT_SKEPTICAL_MIN_EFFECT } from "../core/skeptical.ts"
 
 export class CliError extends Error {
   code: string
@@ -16,8 +17,10 @@ export class CliError extends Error {
   }
 }
 
-export type Command = "analyze" | "project" | "plan" | "schema"
-export const COMMANDS: Command[] = ["analyze", "project", "plan", "schema"]
+export type Command = "analyze" | "skeptical" | "project" | "plan" | "calibrate" | "schema"
+export const COMMANDS: Command[] = ["analyze", "skeptical", "project", "plan", "calibrate", "schema"]
+export const SCHEMA_TARGETS = ["analyze", "skeptical", "project", "plan", "calibrate"] as const
+export type SchemaTarget = (typeof SCHEMA_TARGETS)[number]
 
 export type OutputOptions = {
   json: boolean | null
@@ -50,6 +53,17 @@ export type ProjectArgs = AnalyzeArgs & {
   simulations: number
 }
 
+export type SkepticalArgs = VariantArgs & {
+  threshold: number
+  minEffect: number
+  liftPriorSd: number
+  maxRelativeLoss: number
+}
+
+export type CalibrateArgs = {
+  file: string
+}
+
 export type PlanArgs = {
   baseline: number
   minEffect: number
@@ -61,8 +75,10 @@ export type PlanArgs = {
 export type ParsedArgs =
   | { kind: "help" }
   | { kind: "version" }
-  | { kind: "schema"; target: Command | null; output: OutputOptions }
+  | { kind: "schema"; target: SchemaTarget | null; output: OutputOptions }
   | { kind: "analyze"; args: AnalyzeArgs; output: OutputOptions }
+  | { kind: "skeptical"; args: SkepticalArgs; output: OutputOptions }
+  | { kind: "calibrate"; args: CalibrateArgs; output: OutputOptions }
   | { kind: "project"; args: ProjectArgs; output: OutputOptions }
   | { kind: "plan"; args: PlanArgs; output: OutputOptions }
 
@@ -77,6 +93,9 @@ const OPTIONS = {
   "min-effect": { type: "string" },
   "prior-alpha": { type: "string" },
   "prior-beta": { type: "string" },
+  "lift-prior-sd": { type: "string" },
+  "max-relative-loss": { type: "string" },
+  file: { type: "string" },
   "daily-visitors": { type: "string" },
   horizon: { type: "string" },
   "stop-rule": { type: "string" },
@@ -174,8 +193,8 @@ function parseThreshold(values: RawValues): number {
   return threshold
 }
 
-function parseMinEffect(values: RawValues): number {
-  if (values["min-effect"] === undefined) return DEFAULT_MIN_EFFECT
+function parseMinEffect(values: RawValues, fallback = DEFAULT_MIN_EFFECT): number {
+  if (values["min-effect"] === undefined) return fallback
   const minEffect = parsePercentFlag("min-effect", values["min-effect"])
   if (minEffect < 0 || minEffect >= 1) throw new CliError("--min-effect must be a percent between 0 and 100.", { field: "min-effect" })
   return minEffect
@@ -196,6 +215,33 @@ function parseAnalyzeArgs(values: RawValues): AnalyzeArgs {
   const samples = values.samples === undefined ? DEFAULT_SAMPLES : parseCount("samples", values.samples, { min: 100 })
   const seed = values.seed === undefined ? null : parseCount("seed", values.seed)
   return { ...parseVariants(values), threshold: parseThreshold(values), minEffect: parseMinEffect(values), prior: parsePrior(values), samples, seed }
+}
+
+function parseSkepticalArgs(values: RawValues): SkepticalArgs {
+  let liftPriorSd = DEFAULT_LIFT_PRIOR_SD
+  if (values["lift-prior-sd"] !== undefined) {
+    liftPriorSd = parsePercentFlag("lift-prior-sd", values["lift-prior-sd"])
+    if (liftPriorSd <= 0 || liftPriorSd >= 1) throw new CliError("--lift-prior-sd must be a percent between 0 and 100, exclusive.", { field: "lift-prior-sd" })
+  }
+  let maxRelativeLoss = DEFAULT_MAX_RELATIVE_LOSS
+  if (values["max-relative-loss"] !== undefined) {
+    maxRelativeLoss = parsePercentFlag("max-relative-loss", values["max-relative-loss"])
+    if (maxRelativeLoss < 0 || maxRelativeLoss >= 1) throw new CliError("--max-relative-loss must be a percent from 0 up to 100.", { field: "max-relative-loss" })
+  }
+  return {
+    ...parseVariants(values),
+    threshold: parseThreshold(values),
+    minEffect: parseMinEffect(values, DEFAULT_SKEPTICAL_MIN_EFFECT),
+    liftPriorSd,
+    maxRelativeLoss,
+  }
+}
+
+function parseCalibrateArgs(values: RawValues): CalibrateArgs {
+  if (values.file === undefined || values.file.trim() === "") {
+    throw new CliError("Missing required flag --file, a CSV of past tests: visitorsA,conversionsA,visitorsB,conversionsB per line.", { code: "missing_flag", field: "file" })
+  }
+  return { file: values.file }
 }
 
 function parseStopRule(value: string | undefined): StopRule {
@@ -260,15 +306,17 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
 
   if (command === "schema") {
     const target = rest[0]
-    if (target !== undefined && !["analyze", "project", "plan"].includes(target)) {
-      throw new CliError(`schema takes analyze, project or plan, got "${target}".`, { code: "unknown_command" })
+    if (target !== undefined && !(SCHEMA_TARGETS as readonly string[]).includes(target)) {
+      throw new CliError(`schema takes ${SCHEMA_TARGETS.join(", ")}, got "${target}".`, { code: "unknown_command" })
     }
-    return { kind: "schema", target: (target as Command | undefined) ?? null, output }
+    return { kind: "schema", target: (target as SchemaTarget | undefined) ?? null, output }
   }
   if (rest.length > 0) {
     throw new CliError(`Unexpected argument "${rest[0]}". Inputs are given as flags, e.g. --visitors-a 12000.`, { code: "unexpected_argument" })
   }
   if (command === "analyze") return { kind: "analyze", args: parseAnalyzeArgs(values), output }
+  if (command === "skeptical") return { kind: "skeptical", args: parseSkepticalArgs(values), output }
+  if (command === "calibrate") return { kind: "calibrate", args: parseCalibrateArgs(values), output }
   if (command === "project") return { kind: "project", args: parseProjectArgs(values), output }
   return { kind: "plan", args: parsePlanArgs(values), output }
 }

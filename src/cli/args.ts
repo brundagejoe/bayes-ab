@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util"
 
-import { DEFAULT_MIN_EFFECT, DEFAULT_SAMPLES, DEFAULT_THRESHOLD } from "../core/analyze.ts"
+import { DEFAULT_MIN_EFFECT, DEFAULT_SAMPLES, DEFAULT_THRESHOLD, PRIOR_ALPHA, PRIOR_BETA } from "../core/analyze.ts"
 import { DEFAULT_HORIZON_DAYS, DEFAULT_MAX_LOSS, DEFAULT_SIMULATIONS, type StopRule } from "../core/project.ts"
 
 export class CliError extends Error {
@@ -39,6 +39,7 @@ export type AnalyzeArgs = VariantArgs & {
   minEffect: number
   samples: number
   seed: number | null
+  prior: [number, number]
 }
 
 export type ProjectArgs = AnalyzeArgs & {
@@ -74,6 +75,8 @@ const OPTIONS = {
   "rate-b": { type: "string" },
   threshold: { type: "string" },
   "min-effect": { type: "string" },
+  "prior-alpha": { type: "string" },
+  "prior-beta": { type: "string" },
   "daily-visitors": { type: "string" },
   horizon: { type: "string" },
   "stop-rule": { type: "string" },
@@ -178,10 +181,21 @@ function parseMinEffect(values: RawValues): number {
   return minEffect
 }
 
+function parsePriorParameter(flag: "prior-alpha" | "prior-beta", value: string | undefined, fallback: number): number {
+  if (value === undefined) return fallback
+  const parsed = parseNumber(flag, value)
+  if (parsed <= 0) throw new CliError(`--${flag} must be greater than 0, got "${value}".`, { field: flag })
+  return parsed
+}
+
+function parsePrior(values: RawValues): [number, number] {
+  return [parsePriorParameter("prior-alpha", values["prior-alpha"], PRIOR_ALPHA), parsePriorParameter("prior-beta", values["prior-beta"], PRIOR_BETA)]
+}
+
 function parseAnalyzeArgs(values: RawValues): AnalyzeArgs {
   const samples = values.samples === undefined ? DEFAULT_SAMPLES : parseCount("samples", values.samples, { min: 100 })
   const seed = values.seed === undefined ? null : parseCount("seed", values.seed)
-  return { ...parseVariants(values), threshold: parseThreshold(values), minEffect: parseMinEffect(values), samples, seed }
+  return { ...parseVariants(values), threshold: parseThreshold(values), minEffect: parseMinEffect(values), prior: parsePrior(values), samples, seed }
 }
 
 function parseStopRule(value: string | undefined): StopRule {

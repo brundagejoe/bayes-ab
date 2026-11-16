@@ -1,5 +1,5 @@
 import type { AnalyzeResult } from "../../core/analyze.ts"
-import { capitalize, count, keyValueLines, missedConversions, percent, points, signedPercent, table, unsignedPoints } from "../format.ts"
+import { betaParameter, capitalize, count, keyValueLines, missedConversions, percent, points, signedPercent, table, unsignedPoints } from "../format.ts"
 
 function derivedNote(result: AnalyzeResult, derivedFrom: { rateA?: number; rateB?: number } | null): string | null {
   if (!derivedFrom) return null
@@ -19,6 +19,8 @@ export function renderAnalyzeBrief(result: AnalyzeResult, derivedFrom: { rateA?:
     `lift ${signedPercent(result.effect.relativeLift)} (CI ${signedPercent(lower)} to ${signedPercent(upper)})`,
     `loss if ship B ${unsignedPoints(result.expectedLoss.shipB)}`,
   ]
+  const [priorAlpha, priorBeta] = result.inputs.prior
+  if (priorAlpha !== 1 || priorBeta !== 1) parts.push(`Beta(${betaParameter(priorAlpha)},${betaParameter(priorBeta)}) prior`)
   const note = derivedNote(result, derivedFrom)
   return parts.join(" · ") + (note ? `  ${note}` : "")
 }
@@ -32,7 +34,7 @@ export function renderAnalyze(result: AnalyzeResult, derivedFrom: { rateA?: numb
   const note = derivedNote(result, derivedFrom)
 
   lines.push(
-    `Bayesian A/B test  Beta(${inputs.prior[0]},${inputs.prior[1]}) prior · decision threshold ${percent(inputs.threshold, 0)} · meaningful effect ±${minEffect} relative`
+    `Bayesian A/B test  Beta(${betaParameter(inputs.prior[0])},${betaParameter(inputs.prior[1])}) prior · decision threshold ${percent(inputs.threshold, 0)} · meaningful effect ±${minEffect} relative`
   )
   if (note) lines.push(`                   ${note}`)
   lines.push("")
@@ -58,7 +60,7 @@ export function renderAnalyze(result: AnalyzeResult, derivedFrom: { rateA?: numb
       ["Conversions", count(variants.A.conversions), count(variants.B.conversions)],
       ["Observed rate", percent(variants.A.rate), percent(variants.B.rate)],
       ["Posterior mean", percent(variants.A.posteriorMean, 3), percent(variants.B.posteriorMean, 3)],
-      ["Posterior", `Beta(${count(variants.A.posterior[0])}, ${count(variants.A.posterior[1])})`, `Beta(${count(variants.B.posterior[0])}, ${count(variants.B.posterior[1])})`],
+      ["Posterior", `Beta(${betaParameter(variants.A.posterior[0])}, ${betaParameter(variants.A.posterior[1])})`, `Beta(${betaParameter(variants.B.posterior[0])}, ${betaParameter(variants.B.posterior[1])})`],
     ])
   )
   lines.push("")

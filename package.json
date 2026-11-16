@@ -1,8 +1,15 @@
 {
   "name": "bayes-ab",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Bayesian A/B test analysis on the command line, for humans and agents",
-  "keywords": ["ab-testing", "bayesian", "statistics", "cli", "experimentation", "conversion-rate"],
+  "keywords": [
+    "ab-testing",
+    "bayesian",
+    "statistics",
+    "cli",
+    "experimentation",
+    "conversion-rate"
+  ],
   "homepage": "https://www.joebrundage.com/tools/bayesian-ab-test",
   "repository": {
     "type": "git",
@@ -23,7 +30,11 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=18.11"
   },

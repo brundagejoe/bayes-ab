@@ -98,6 +98,14 @@ bayes-ab analyze --visitors-a 12000 --conversions-a 660 --visitors-b 10000 --rat
 # Continue test · P(B beats A) 97.13% · P(lift > +10%) 56.76% · lift +10.92% (CI -0.30% to +23.39%) · loss if ship B 0.0034 pp  B = 610/10000 from --rate-b 6.10%
 ```
 
+Choose a prior. Every analysis defaults to a flat Beta(1,1) on each conversion rate; `--prior-alpha` and `--prior-beta` replace it, the same prior for both variants. Beta(α, β) reads as α conversions in α + β visitors of evidence you already had, so a prior worth 1,000 visitors centred on 5.5% is Beta(55, 945). Fractional values work, e.g. the Jeffreys prior Beta(0.5, 0.5):
+
+```sh
+bayes-ab analyze --visitors-a 12000 --conversions-a 660 --visitors-b 11850 --conversions-b 714 --prior-alpha 55 --prior-beta 945
+```
+
+A shared prior pulls both arms toward the same rate, so a strong one shrinks the estimated lift and makes decisions more conservative.
+
 ### project
 
 Takes the current posterior, draws a plausible pair of true conversion rates, simulates each future day of traffic, and re-runs the decision rule after every day. Repeats that thousands of times.
@@ -173,7 +181,7 @@ bayes-ab analyze --visitors-a 12000 --conversions-a 660 --visitors-b 11850 --con
 ```json
 {
   "tool": "bayes-ab",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "command": "analyze",
   "inputs": { "visitorsA": 12000, "conversionsA": 660, "visitorsB": 11850, "conversionsB": 714, "threshold": 0.95, "minEffect": 0.1, "prior": [1, 1], "samples": 12000, "seed": 116218 },
   "decision": { "status": "continue", "label": "Continue test", "evidence": "low", "maturity": "building", "maturityProgress": 0.462241, "bayesActionNow": "B", "expectedRegretNow": 0.00005 },
@@ -227,7 +235,11 @@ import { analyze, project, plan } from "bayes-ab"
 
 const result = analyze({ visitorsA: 12000, conversionsA: 660, visitorsB: 11850, conversionsB: 714 })
 result.probability.bBeatsA   // 0.9591138673472563
+
+analyze({ visitorsA: 12000, conversionsA: 660, visitorsB: 11850, conversionsB: 714, prior: [55, 945] })
 ```
+
+`analyze` and `project` take an optional `prior: [alpha, beta]`, default `[1, 1]`. Non-positive values throw a `RangeError`; `validatePrior` and `isDefaultPrior` are exported for forms that want to check first.
 
 `analyze({ ..., includeChart: true })` adds `chart` (both posterior densities) and `liftChart` (the exact density of the relative lift, peak scaled to 1), which is what the web tool plots.
 
@@ -236,7 +248,8 @@ The primitives behind it are exported too, for anything that needs the same math
 | Export | What it does |
 |---|---|
 | `betaPdf(x, alpha, beta)`, `logBeta`, `logGamma` | Beta density and its log-gamma building blocks |
-| `probabilityBBeatsA(alphaA, betaA, alphaB, betaB)` | Exact P(B > A) for two Beta posteriors |
+| `probabilityBBeatsA(alphaA, betaA, alphaB, betaB)` | P(B > A) for two Beta posteriors: exact closed form for whole-number alphas, numerical integration otherwise |
+| `regularizedIncompleteBeta(x, a, b)` | The Beta(a, b) CDF at x |
 | `integratedExpectedLoss(alphaA, betaA, alphaB, betaB)` | Expected loss of shipping each variant by numerical integration, no sampling |
 | `liftDensity(alphaA, betaA, alphaB, betaB, sortedLifts)` | Exact relative-lift density over the range the sorted lifts span |
 
@@ -244,8 +257,8 @@ This package is the source of truth for the math on joebrundage.com: the [calcul
 
 ## Method
 
-- Each conversion rate gets a Beta(1,1) prior. Posteriors are Beta(1 + conversions, 1 + non-conversions).
-- P(B beats A) is the exact closed form from [Evan Miller](https://www.evanmiller.org/bayesian-ab-testing.html). P(B is harmful) is its exact complement.
+- Each conversion rate gets a Beta(α, β) prior, Beta(1,1) unless you choose another. Posteriors are Beta(α + conversions, β + non-conversions).
+- P(B beats A) is the exact closed form from [Evan Miller](https://www.evanmiller.org/bayesian-ab-testing.html) when α is a whole number. For a fractional α it is integrated numerically (tanh-sinh quadrature over the incomplete beta function), accurate to about 1e-10. P(B is harmful) is its exact complement.
 - Lift intervals, threshold probabilities and expected loss come from 12,000 seeded Monte Carlo draws.
 - The meaningful effect is relative and symmetric: `--min-effect 10` means B must be 10% better than A to count as a win or 10% worse to count as a loss.
 - `project` samples true rates from the exact posterior, then uses a normal approximation to the posterior when re-checking the stopping rule on each simulated day. Day zero is checked exactly.

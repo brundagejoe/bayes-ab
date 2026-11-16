@@ -130,12 +130,96 @@ function probabilityRightBeatsLeftDirect(
   return Math.exp(maxLog) * scaledSum
 }
 
-/** Exact P(B > A) for independent Beta posteriors, via Evan Miller's closed form. */
+/**
+ * P(B > A) for independent Beta posteriors. Exact via Evan Miller's closed form
+ * when the alphas are whole numbers, which they are under any whole-number
+ * prior. The closed form sums over 0..alpha-1, so a fractional alpha (a
+ * Jeffreys Beta(0.5, 0.5) prior, say) falls back to numerical integration,
+ * accurate to roughly 1e-10.
+ */
 export function probabilityBBeatsA(alphaA: number, betaA: number, alphaB: number, betaB: number): number {
+  if (!Number.isInteger(alphaA) || !Number.isInteger(alphaB)) {
+    return probabilityBBeatsANumeric(alphaA, betaA, alphaB, betaB)
+  }
   if (alphaB <= alphaA) {
     return probabilityRightBeatsLeftDirect(alphaA, betaA, alphaB, betaB)
   }
   return 1 - probabilityRightBeatsLeftDirect(alphaB, betaB, alphaA, betaA)
+}
+
+function betaContinuedFraction(x: number, a: number, b: number): number {
+  const TINY = 1e-300
+  const EPSILON = 1e-15
+  const MAX_ITERATIONS = 100000
+  const qab = a + b
+  const qap = a + 1
+  const qam = a - 1
+  let c = 1
+  let d = 1 - (qab * x) / qap
+  if (Math.abs(d) < TINY) d = TINY
+  d = 1 / d
+  let h = d
+  for (let m = 1; m <= MAX_ITERATIONS; m += 1) {
+    const m2 = 2 * m
+    let aa = (m * (b - m) * x) / ((qam + m2) * (a + m2))
+    d = 1 + aa * d
+    if (Math.abs(d) < TINY) d = TINY
+    c = 1 + aa / c
+    if (Math.abs(c) < TINY) c = TINY
+    d = 1 / d
+    h *= d * c
+    aa = (-(a + m) * (qab + m) * x) / ((a + m2) * (qap + m2))
+    d = 1 + aa * d
+    if (Math.abs(d) < TINY) d = TINY
+    c = 1 + aa / c
+    if (Math.abs(c) < TINY) c = TINY
+    d = 1 / d
+    const delta = d * c
+    h *= delta
+    if (Math.abs(delta - 1) < EPSILON) break
+  }
+  return h
+}
+
+/** Regularized incomplete beta function I_x(a, b): the Beta(a, b) CDF at x. */
+export function regularizedIncompleteBeta(x: number, a: number, b: number): number {
+  if (x <= 0) return 0
+  if (x >= 1) return 1
+  if (x > (a + 1) / (a + b + 2)) return 1 - regularizedIncompleteBeta(1 - x, b, a)
+  const logFront = a * Math.log(x) + b * Math.log1p(-x) - logBeta(a, b)
+  return (Math.exp(logFront) * betaContinuedFraction(x, a, b)) / a
+}
+
+/**
+ * P(B > A) = E_A[1 - F_B(A)], integrated with tanh-sinh quadrature over the
+ * window where A has mass. Tanh-sinh tolerates the integrable endpoint
+ * singularities a sub-1 alpha or beta puts in the density.
+ */
+function probabilityBBeatsANumeric(alphaA: number, betaA: number, alphaB: number, betaB: number): number {
+  const total = alphaA + betaA
+  const meanA = alphaA / total
+  const sdA = Math.sqrt((alphaA * betaA) / (total * total * (total + 1)))
+  const low = Math.max(0, meanA - 40 * sdA)
+  const high = Math.min(1, meanA + 40 * sdA)
+  const center = (low + high) / 2
+  const halfWidth = (high - low) / 2
+  const logNormalizer = logBeta(alphaA, betaA)
+  const STEP = 1 / 128
+  const T_MAX = 3.5
+  let mass = 0
+  let weighted = 0
+  for (let t = -T_MAX; t <= T_MAX + 1e-12; t += STEP) {
+    const inner = (Math.PI / 2) * Math.sinh(t)
+    const x = center + halfWidth * Math.tanh(inner)
+    if (x <= 0 || x >= 1) continue
+    const coshInner = Math.cosh(inner)
+    const weight = ((Math.PI / 2) * Math.cosh(t)) / (coshInner * coshInner)
+    const density = Math.exp((alphaA - 1) * Math.log(x) + (betaA - 1) * Math.log1p(-x) - logNormalizer)
+    if (!Number.isFinite(density)) continue
+    mass += weight * density
+    weighted += weight * density * (1 - regularizedIncompleteBeta(x, alphaB, betaB))
+  }
+  return mass > 0 ? weighted / mass : 0.5
 }
 
 export function inverseNormalCdf(p: number): number {

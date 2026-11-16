@@ -7,6 +7,7 @@ export type ShareInputs = {
   conversionsB: number
   threshold: number
   minEffect: number
+  prior?: [number, number]
 }
 
 function formatPercentParam(fraction: number): string {
@@ -22,5 +23,10 @@ export function shareUrl(inputs: ShareInputs): string {
     thresholdPercent: formatPercentParam(inputs.threshold),
     meaningfulLiftPercent: formatPercentParam(inputs.minEffect),
   })
+  /* The flat Beta(1, 1) default is left out so default links stay as they were. */
+  if (inputs.prior && !(inputs.prior[0] === 1 && inputs.prior[1] === 1)) {
+    params.set("priorAlpha", String(inputs.prior[0]))
+    params.set("priorBeta", String(inputs.prior[1]))
+  }
   return `${WEB_TOOL_URL}?${params.toString()}`
 }

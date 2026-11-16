@@ -1,5 +1,5 @@
 import type { ProjectResult } from "../../core/project.ts"
-import { count, keyValueLines, percent, table, unsignedPoints } from "../format.ts"
+import { betaParameter, count, keyValueLines, percent, table, unsignedPoints } from "../format.ts"
 
 function describeRule(result: ProjectResult): string {
   const { stopRule, threshold, minEffect, maxLoss } = result.inputs
@@ -36,6 +36,8 @@ export function renderProjectBrief(result: ProjectResult): string {
     result.daysToDecision ? `median day ${result.daysToDecision.p50} if it decides (p90 day ${result.daysToDecision.p90})` : "no simulated future decided",
     `${count(dailyVisitors)}/day per variant`,
   ]
+  const [priorAlpha, priorBeta] = result.inputs.prior
+  if (priorAlpha !== 1 || priorBeta !== 1) parts.push(`Beta(${betaParameter(priorAlpha)},${betaParameter(priorBeta)}) prior`)
   return parts.join(" · ")
 }
 
@@ -46,6 +48,8 @@ export function renderProject(result: ProjectResult): string {
     `Forward projection  ${count(inputs.dailyVisitors)} visitors/day per variant · ${inputs.horizonDays}-day horizon · ${count(inputs.simulations)} simulated futures`
   )
   lines.push(`Stopping rule       ${describeRule(result)}`)
+  const [priorAlpha, priorBeta] = inputs.prior
+  if (priorAlpha !== 1 || priorBeta !== 1) lines.push(`Prior               Beta(${betaParameter(priorAlpha)},${betaParameter(priorBeta)}) on each variant`)
   lines.push("")
 
   if (result.alreadyDecided && result.decisionNow) {

@@ -1,4 +1,4 @@
-import { analyze, deriveSeed, type AnalyzeResult, DEFAULT_MIN_EFFECT, DEFAULT_THRESHOLD, PRIOR_ALPHA, PRIOR_BETA } from "./analyze.ts"
+import { analyze, deriveSeed, type AnalyzeResult, DEFAULT_MIN_EFFECT, DEFAULT_THRESHOLD, PRIOR_ALPHA, PRIOR_BETA, validatePrior } from "./analyze.ts"
 import { makeDeterministicRandom, normalCdf, normalPdf, quantile, sampleBeta, sampleBinomialApprox } from "./math.ts"
 import { shareUrl } from "./share.ts"
 
@@ -22,6 +22,8 @@ export type ProjectInputs = {
   maxLoss?: number
   simulations?: number
   seed?: number | null
+  /** Beta(alpha, beta) prior applied to both variants. Defaults to the flat Beta(1, 1). */
+  prior?: [number, number]
 }
 
 export type ProjectResult = {
@@ -146,8 +148,10 @@ export function project({
   maxLoss = DEFAULT_MAX_LOSS,
   simulations = DEFAULT_SIMULATIONS,
   seed = null,
+  prior = [PRIOR_ALPHA, PRIOR_BETA],
 }: ProjectInputs): ProjectResult {
-  const current = analyze({ visitorsA, conversionsA, visitorsB, conversionsB, threshold, minEffect })
+  const [priorAlpha, priorBeta] = validatePrior(prior)
+  const current = analyze({ visitorsA, conversionsA, visitorsB, conversionsB, threshold, minEffect, prior: [priorAlpha, priorBeta] })
   const resolvedSeed =
     seed ??
     deriveSeed(visitorsA, conversionsA, visitorsB, conversionsB, dailyVisitors, horizonDays, ["lift", "superiority", "loss"].indexOf(stopRule), simulations)
@@ -158,7 +162,7 @@ export function project({
     conversionsB,
     threshold,
     minEffect,
-    prior: [PRIOR_ALPHA, PRIOR_BETA],
+    prior: [priorAlpha, priorBeta],
     dailyVisitors,
     horizonDays,
     stopRule,
@@ -166,7 +170,7 @@ export function project({
     simulations,
     seed: resolvedSeed,
   }
-  const link = shareUrl({ visitorsA, conversionsA, visitorsB, conversionsB, threshold, minEffect })
+  const link = shareUrl({ visitorsA, conversionsA, visitorsB, conversionsB, threshold, minEffect, prior: [priorAlpha, priorBeta] })
   const diagnostic = stopRule === "lift" && liftNearThreshold(current, minEffect) ? "lift_near_threshold" : null
 
   const decisionNow = decisionNowFrom(current, stopRule, threshold, maxLoss)
@@ -185,10 +189,10 @@ export function project({
     }
   }
 
-  const alphaA0 = PRIOR_ALPHA + conversionsA
-  const betaA0 = PRIOR_BETA + (visitorsA - conversionsA)
-  const alphaB0 = PRIOR_ALPHA + conversionsB
-  const betaB0 = PRIOR_BETA + (visitorsB - conversionsB)
+  const alphaA0 = priorAlpha + conversionsA
+  const betaA0 = priorBeta + (visitorsA - conversionsA)
+  const alphaB0 = priorAlpha + conversionsB
+  const betaB0 = priorBeta + (visitorsB - conversionsB)
   const random = makeDeterministicRandom(resolvedSeed)
   const decidedByDay = new Array<number>(horizonDays + 1).fill(0)
   const decisionDays: number[] = []

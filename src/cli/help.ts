@@ -4,7 +4,8 @@ export function helpText(version: string): string {
   return `bayes-ab ${version}  Bayesian A/B test analysis for humans and agents
 
 Compares two variants of a binary outcome (signup, click, purchase) using
-Beta(1,1) posteriors on each conversion rate. Reports the probability that B
+Beta posteriors on each conversion rate, from a flat Beta(1,1) prior unless
+you choose another. Reports the probability that B
 beats A, the probability the lift clears a meaningful threshold, expected
 loss from shipping either variant, and a forward projection of how long the
 test needs to run. Same math as ${WEB_TOOL_URL}
@@ -31,6 +32,12 @@ INPUTS (analyze, project)
   --min-effect PCT                     Meaningful relative effect, symmetric: with 10, B must be
                                        10% better than A to count as a win or 10% worse to count
                                        as a loss. Relative, not percentage points.    default 10
+  --prior-alpha N, --prior-beta N      Beta(alpha, beta) prior on each variant's conversion rate,
+                                       the same for both. Any positive number. Reads as alpha
+                                       conversions in alpha + beta visitors of prior evidence,
+                                       with prior mean alpha / (alpha + beta).
+                                       Beta(1,1) is flat; Beta(0.5,0.5) is Jeffreys; Beta(55,945)
+                                       says "about 5.5%, worth 1,000 visitors".   default 1, 1
   Whole numbers may include commas or underscores: 12,000 and 12_000 both work.
 
 PROJECTION (project)

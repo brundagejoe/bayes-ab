@@ -21,6 +21,12 @@ export function count(value: number): string {
   return Math.round(value).toLocaleString("en-US")
 }
 
+/** A Beta parameter: whole numbers with separators, fractional ones to three decimals. */
+export function betaParameter(value: number): string {
+  if (Number.isInteger(value)) return count(value)
+  return value.toLocaleString("en-US", { maximumFractionDigits: 3 })
+}
+
 export function missedConversions(regretRate: number, visitors = 10000): string {
   const missed = regretRate * visitors
   const digits = missed < 1 ? 2 : missed < 10 ? 1 : 0

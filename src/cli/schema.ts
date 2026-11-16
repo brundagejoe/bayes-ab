@@ -21,7 +21,7 @@ const variantInputs = {
   conversionsB: integer,
   threshold: fraction,
   minEffect: fraction,
-  prior: pair(number),
+  prior: { ...pair({ type: "number", exclusiveMinimum: 0 }), description: "The Beta(alpha, beta) prior applied to each variant. [1, 1] unless --prior-alpha or --prior-beta was given." },
 }
 
 const derivedFrom = {

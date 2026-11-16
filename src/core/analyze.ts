@@ -46,6 +46,8 @@ export type AnalyzeInputs = {
   samples?: number
   seed?: number | null
   includeChart?: boolean
+  /** Beta(alpha, beta) prior applied to both variants. Defaults to the flat Beta(1, 1). */
+  prior?: [number, number]
 }
 
 export type VariantSummary = {
@@ -122,6 +124,19 @@ export type AnalyzeResult = {
   chart?: ChartPoint[]
   liftChart?: LiftDensityPoint[]
   shareUrl: string
+}
+
+/** Throws a RangeError unless both prior parameters are finite and positive. */
+export function validatePrior(prior: [number, number]): [number, number] {
+  const [alpha, beta] = prior
+  if (!(Number.isFinite(alpha) && alpha > 0 && Number.isFinite(beta) && beta > 0)) {
+    throw new RangeError(`Prior parameters must be finite and greater than 0, got Beta(${alpha}, ${beta}).`)
+  }
+  return [alpha, beta]
+}
+
+export function isDefaultPrior([alpha, beta]: [number, number]): boolean {
+  return alpha === PRIOR_ALPHA && beta === PRIOR_BETA
 }
 
 export function deriveSeed(...parts: number[]): number {
@@ -234,11 +249,13 @@ export function analyze({
   samples = DEFAULT_SAMPLES,
   seed = null,
   includeChart = false,
+  prior = [PRIOR_ALPHA, PRIOR_BETA],
 }: AnalyzeInputs): AnalyzeResult {
-  const alphaA = PRIOR_ALPHA + conversionsA
-  const betaA = PRIOR_BETA + (visitorsA - conversionsA)
-  const alphaB = PRIOR_ALPHA + conversionsB
-  const betaB = PRIOR_BETA + (visitorsB - conversionsB)
+  const [priorAlpha, priorBeta] = validatePrior(prior)
+  const alphaA = priorAlpha + conversionsA
+  const betaA = priorBeta + (visitorsA - conversionsA)
+  const alphaB = priorAlpha + conversionsB
+  const betaB = priorBeta + (visitorsB - conversionsB)
   const rateA = conversionsA / visitorsA
   const rateB = conversionsB / visitorsB
   const posteriorMeanA = alphaA / (alphaA + betaA)
@@ -279,7 +296,7 @@ export function analyze({
       conversionsB,
       threshold,
       minEffect,
-      prior: [PRIOR_ALPHA, PRIOR_BETA],
+      prior: [priorAlpha, priorBeta],
       samples,
       seed: resolvedSeed,
     },
@@ -330,7 +347,7 @@ export function analyze({
     },
     waiting: waitingScenarios(alphaA, betaA, alphaB, betaB, expectedRegretNow),
     frequentist: { pValueTwoSided: twoSidedPValue(visitorsA, conversionsA, visitorsB, conversionsB) },
-    shareUrl: shareUrl({ visitorsA, conversionsA, visitorsB, conversionsB, threshold, minEffect }),
+    shareUrl: shareUrl({ visitorsA, conversionsA, visitorsB, conversionsB, threshold, minEffect, prior: [priorAlpha, priorBeta] }),
   }
 
   if (includeChart) {
